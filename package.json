@@ -1,0 +1,56 @@
+{
+  "name": "function-performer",
+  "version": "1.0.0-canary.0",
+  "license": "MIT",
+  "author": "Oleg Putseiko <oleg.putseiko@gmail.com> (https://github.com/oleg-putseiko)",
+  "keywords": [],
+  "homepage": "https://github.com/oleg-putseiko/function-performer",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oleg-putseiko/function-performer"
+  },
+  "bugs": {
+    "url": "https://github.com/oleg-putseiko/function-performer/issues"
+  },
+  "main": "dist/index.js",
+  "files": [
+    "dist/**/*"
+  ],
+  "exports": "./dist/index.js",
+  "scripts": {
+    "build": "yarn build:swc && yarn build:tsc",
+    "build:swc": "swc src -d dist --strip-leading-paths",
+    "build:tsc": "tsc",
+    "lint": "eslint ./src/**/*.ts -c ./eslint.config.mjs",
+    "lint:fix": "yarn lint --fix && yarn format:fix",
+    "lint:strict": "yarn lint --max-warnings=0 && yarn format",
+    "format": "prettier -c .",
+    "format:fix": "prettier -w .",
+    "typecheck": "tsc --noEmit --incremental false",
+    "prepare": "husky install | chmod +x ./.husky/*"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^18.2.0",
+    "@commitlint/config-conventional": "^18.1.0",
+    "@swc/cli": "^0.5.2",
+    "@swc/core": "^1.10.1",
+    "@types/node": "^22.10.1",
+    "@typescript-eslint/eslint-plugin": "^8.28.0",
+    "@typescript-eslint/parser": "^8.28.0",
+    "eslint": "^9.16.0",
+    "eslint-config-prettier": "^10.1.1",
+    "husky": "^8.0.3",
+    "lint-staged": "^15.0.2",
+    "prettier": "^3.0.3",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": "^18.18.0 || ^20.9.0 || >=21.1.0",
+    "yarn": ">=3.6.3"
+  },
+  "volta": {
+    "node": "18.18.0",
+    "yarn": "3.6.4"
+  },
+  "packageManager": "yarn@3.6.4"
+}
