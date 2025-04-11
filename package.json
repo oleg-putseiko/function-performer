@@ -1,9 +1,17 @@
 {
   "name": "function-performer",
   "version": "1.0.0-canary.0",
+  "description": "Performer providing API for debounce, throttle and deduplication functions",
   "license": "MIT",
   "author": "Oleg Putseiko <oleg.putseiko@gmail.com> (https://github.com/oleg-putseiko)",
-  "keywords": [],
+  "keywords": [
+    "debounce",
+    "throttle",
+    "deduplicate",
+    "schedule",
+    "function",
+    "performer"
+  ],
   "homepage": "https://github.com/oleg-putseiko/function-performer",
   "repository": {
     "type": "git",
