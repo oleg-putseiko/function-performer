@@ -11,7 +11,7 @@ type FunctionCall = {
   timeout: Timeout | null;
 };
 
-type DebouncedFunctionCall = FunctionCall;
+type DebouncedFunctionCall = { timeout: Timeout | null };
 type DeduplicatedFunctionCall = FunctionCall & { count: number };
 
 type Deduplication = {
@@ -65,7 +65,7 @@ export class Performer {
     let call = this._debouncing.calls.get(func);
 
     if (call === undefined) {
-      call = { args, timeout: null };
+      call = { timeout: null };
       this._debouncing.calls.set(func, call);
     }
 
