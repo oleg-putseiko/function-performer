@@ -4,14 +4,14 @@ type Timeout = ReturnType<typeof setTimeout>;
 
 type DeduplicatedFunction = (count: number, ...args: any[]) => any;
 
-type FunctionCall = {
+type DeduplicatedFunctionCall = {
   count: number;
   args: unknown[];
   timeout: Timeout | null;
 };
 
 type Deduplication = {
-  calls: Map<DeduplicatedFunction, FunctionCall[]>;
+  calls: Map<DeduplicatedFunction, DeduplicatedFunctionCall[]>;
   interval: number;
 };
 
@@ -19,18 +19,60 @@ type DeduplicationConfig = {
   interval?: number;
 };
 
+type DebouncedFunction = (...args: any[]) => any;
+
+type DebouncedFunctionCall = {
+  args: unknown[];
+  timeout: Timeout | null;
+};
+
+type Debouncing = {
+  calls: Map<DebouncedFunction, DebouncedFunctionCall>;
+  interval: number;
+};
+
+type DebouncingConfig = {
+  interval?: number;
+};
+
 type PerformerConfig = {
+  debouncing?: DebouncingConfig;
   deduplication?: DeduplicationConfig;
 };
 
 export class Performer {
+  private readonly _debouncing: Debouncing;
   private readonly _deduplication: Deduplication;
 
   constructor(config?: PerformerConfig) {
+    this._debouncing = {
+      calls: new Map<DebouncedFunction, DebouncedFunctionCall>(),
+      interval: config?.debouncing?.interval ?? 0,
+    };
+
     this._deduplication = {
-      calls: new Map<DeduplicatedFunction, FunctionCall[]>(),
+      calls: new Map<DeduplicatedFunction, DeduplicatedFunctionCall[]>(),
       interval: config?.deduplication?.interval ?? 0,
     };
+  }
+
+  debounce(func: DebouncedFunction, ...args: unknown[]) {
+    let call = this._debouncing.calls.get(func);
+
+    if (call === undefined) {
+      call = { args, timeout: null };
+      this._debouncing.calls.set(func, call);
+    }
+
+    if (call.timeout !== null) {
+      clearTimeout(call.timeout);
+      call.timeout = null;
+    }
+
+    call.timeout = setTimeout(() => {
+      this._debouncing.calls.delete(func);
+      func(...args);
+    }, this._debouncing.interval);
   }
 
   deduplicate(func: DeduplicatedFunction, ...args: unknown[]) {
