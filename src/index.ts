@@ -2,28 +2,21 @@ import isDeepEqual from 'fast-deep-equal';
 
 type Timeout = ReturnType<typeof setTimeout>;
 
+type DebouncedFunction = (...args: any[]) => any;
+type ThrottledFunction = (...args: any[]) => any;
 type DeduplicatedFunction = (count: number, ...args: any[]) => any;
 
-type DeduplicatedFunctionCall = {
-  count: number;
+type FunctionCall = {
   args: unknown[];
   timeout: Timeout | null;
 };
+
+type DebouncedFunctionCall = FunctionCall;
+type DeduplicatedFunctionCall = FunctionCall & { count: number };
 
 type Deduplication = {
   calls: Map<DeduplicatedFunction, DeduplicatedFunctionCall[]>;
   interval: number;
-};
-
-type DeduplicationConfig = {
-  interval?: number;
-};
-
-type DebouncedFunction = (...args: any[]) => any;
-
-type DebouncedFunctionCall = {
-  args: unknown[];
-  timeout: Timeout | null;
 };
 
 type Debouncing = {
@@ -31,23 +24,35 @@ type Debouncing = {
   interval: number;
 };
 
-type DebouncingConfig = {
+type Throttling = {
+  calls: Set<ThrottledFunction>;
+  interval: number;
+};
+
+type TimedFunctionConfig = {
   interval?: number;
 };
 
 type PerformerConfig = {
-  debouncing?: DebouncingConfig;
-  deduplication?: DeduplicationConfig;
+  debouncing?: TimedFunctionConfig;
+  throttling?: TimedFunctionConfig;
+  deduplication?: TimedFunctionConfig;
 };
 
 export class Performer {
   private readonly _debouncing: Debouncing;
+  private readonly _throttling: Throttling;
   private readonly _deduplication: Deduplication;
 
   constructor(config?: PerformerConfig) {
     this._debouncing = {
       calls: new Map<DebouncedFunction, DebouncedFunctionCall>(),
       interval: config?.debouncing?.interval ?? 0,
+    };
+
+    this._throttling = {
+      calls: new Set<ThrottledFunction>(),
+      interval: config?.throttling?.interval ?? 0,
     };
 
     this._deduplication = {
@@ -73,6 +78,17 @@ export class Performer {
       this._debouncing.calls.delete(func);
       func(...args);
     }, this._debouncing.interval);
+  }
+
+  throttle(func: ThrottledFunction, ...args: unknown[]) {
+    if (!this._throttling.calls.has(func)) {
+      func(...args);
+      this._throttling.calls.add(func);
+
+      setTimeout(() => {
+        this._throttling.calls.delete(func);
+      }, this._throttling.interval);
+    }
   }
 
   deduplicate(func: DeduplicatedFunction, ...args: unknown[]) {
