@@ -14,18 +14,18 @@ type FunctionCall = {
 type DebouncedFunctionCall = { timeout: Timeout | null };
 type DeduplicatedFunctionCall = FunctionCall & { count: number };
 
-type Deduplication = {
-  calls: Map<DeduplicatedFunction, DeduplicatedFunctionCall[]>;
-  interval: number;
-};
-
-type Debouncing = {
+type DebounceContext = {
   calls: Map<DebouncedFunction, DebouncedFunctionCall>;
   interval: number;
 };
 
-type Throttling = {
+type ThrottleContext = {
   calls: Set<ThrottledFunction>;
+  interval: number;
+};
+
+type DeduplicationContext = {
+  calls: Map<DeduplicatedFunction, DeduplicatedFunctionCall[]>;
   interval: number;
 };
 
@@ -34,25 +34,25 @@ type TimedFunctionConfig = {
 };
 
 type PerformerConfig = {
-  debouncing?: TimedFunctionConfig;
-  throttling?: TimedFunctionConfig;
+  debounce?: TimedFunctionConfig;
+  throttle?: TimedFunctionConfig;
   deduplication?: TimedFunctionConfig;
 };
 
 export class Performer {
-  private readonly _debouncing: Debouncing;
-  private readonly _throttling: Throttling;
-  private readonly _deduplication: Deduplication;
+  private readonly _debounce: DebounceContext;
+  private readonly _throttle: ThrottleContext;
+  private readonly _deduplication: DeduplicationContext;
 
   constructor(config?: PerformerConfig) {
-    this._debouncing = {
+    this._debounce = {
       calls: new Map<DebouncedFunction, DebouncedFunctionCall>(),
-      interval: config?.debouncing?.interval ?? 0,
+      interval: config?.debounce?.interval ?? 0,
     };
 
-    this._throttling = {
+    this._throttle = {
       calls: new Set<ThrottledFunction>(),
-      interval: config?.throttling?.interval ?? 0,
+      interval: config?.throttle?.interval ?? 0,
     };
 
     this._deduplication = {
@@ -62,11 +62,11 @@ export class Performer {
   }
 
   debounce(func: DebouncedFunction, ...args: unknown[]) {
-    let call = this._debouncing.calls.get(func);
+    let call = this._debounce.calls.get(func);
 
     if (call === undefined) {
       call = { timeout: null };
-      this._debouncing.calls.set(func, call);
+      this._debounce.calls.set(func, call);
     }
 
     if (call.timeout !== null) {
@@ -75,19 +75,19 @@ export class Performer {
     }
 
     call.timeout = setTimeout(() => {
-      this._debouncing.calls.delete(func);
+      this._debounce.calls.delete(func);
       func(...args);
-    }, this._debouncing.interval);
+    }, this._debounce.interval);
   }
 
   throttle(func: ThrottledFunction, ...args: unknown[]) {
-    if (!this._throttling.calls.has(func)) {
+    if (!this._throttle.calls.has(func)) {
       func(...args);
-      this._throttling.calls.add(func);
+      this._throttle.calls.add(func);
 
       setTimeout(() => {
-        this._throttling.calls.delete(func);
-      }, this._throttling.interval);
+        this._throttle.calls.delete(func);
+      }, this._throttle.interval);
     }
   }
 
