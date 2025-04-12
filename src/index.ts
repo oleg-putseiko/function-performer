@@ -2,6 +2,8 @@ import isDeepEqual from 'fast-deep-equal';
 
 type Timeout = ReturnType<typeof setTimeout>;
 
+type AnyFunction = (...args: any[]) => any;
+
 type DebouncedFunction = (...args: any[]) => any;
 type ThrottledFunction = (...args: any[]) => any;
 type DeduplicatedFunction = (count: number, ...args: any[]) => any;
@@ -29,44 +31,90 @@ type DeduplicationContext = {
   interval: number;
 };
 
-type TimedFunctionConfig = {
+interface IPerformanceFunction {
+  (func: AnyFunction, ...args: unknown[]): void;
+}
+
+interface IPerformanceProperty<
+  TConfig extends PerformanceFunctionConfig = PerformanceFunctionConfig,
+> extends IPerformanceFunction {
+  configure: (config: TConfig) => IPerformanceFunction;
+}
+
+type PerformanceFunctionConfig = {
   interval?: number;
 };
 
 type PerformerConfig = {
-  debounce?: TimedFunctionConfig;
-  throttle?: TimedFunctionConfig;
-  deduplication?: TimedFunctionConfig;
+  debounce?: PerformanceFunctionConfig;
+  throttle?: PerformanceFunctionConfig;
+  deduplication?: PerformanceFunctionConfig;
 };
 
 export class Performer {
-  private readonly _debounce: DebounceContext;
-  private readonly _throttle: ThrottleContext;
-  private readonly _deduplication: DeduplicationContext;
+  private readonly _debounceContext: DebounceContext;
+  private readonly _throttleContext: ThrottleContext;
+  private readonly _deduplicationContext: DeduplicationContext;
+
+  readonly debounce: IPerformanceProperty;
+  readonly throttle: IPerformanceProperty;
+  readonly deduplicate: IPerformanceProperty;
 
   constructor(config?: PerformerConfig) {
-    this._debounce = {
+    this._debounceContext = {
       calls: new Map<DebouncedFunction, DebouncedFunctionCall>(),
       interval: config?.debounce?.interval ?? 0,
     };
 
-    this._throttle = {
+    this._throttleContext = {
       calls: new Set<ThrottledFunction>(),
       interval: config?.throttle?.interval ?? 0,
     };
 
-    this._deduplication = {
+    this._deduplicationContext = {
       calls: new Map<DeduplicatedFunction, DeduplicatedFunctionCall[]>(),
       interval: config?.deduplication?.interval ?? 0,
     };
+
+    this.debounce = this._deconfigure(
+      this._debounce.bind(this),
+    ) as IPerformanceProperty;
+    this.debounce.configure = this._configure(this._debounce.bind(this));
+
+    this.throttle = this._deconfigure(
+      this._throttle.bind(this),
+    ) as IPerformanceProperty;
+    this.throttle.configure = this._configure(this._throttle.bind(this));
+
+    this.deduplicate = this._deconfigure(
+      this._deduplicate.bind(this),
+    ) as IPerformanceProperty;
+    this.deduplicate.configure = this._configure(this._deduplicate.bind(this));
   }
 
-  debounce(func: DebouncedFunction, ...args: unknown[]) {
-    let call = this._debounce.calls.get(func);
+  private _deconfigure<TFunction extends AnyFunction>(func: TFunction) {
+    return (...args: unknown[]) => func(null, ...args);
+  }
+
+  private _configure<
+    TFunction extends AnyFunction,
+    TConfig extends PerformanceFunctionConfig = PerformanceFunctionConfig,
+  >(func: TFunction) {
+    return (config: TConfig) => {
+      return (...args: unknown[]) => func(config, ...args);
+    };
+  }
+
+  private _debounce(
+    config: PerformanceFunctionConfig | null,
+    func: DebouncedFunction,
+    ...args: unknown[]
+  ) {
+    let call = this._debounceContext.calls.get(func);
 
     if (call === undefined) {
       call = { timeout: null };
-      this._debounce.calls.set(func, call);
+      this._debounceContext.calls.set(func, call);
     }
 
     if (call.timeout !== null) {
@@ -75,27 +123,35 @@ export class Performer {
     }
 
     call.timeout = setTimeout(() => {
-      this._debounce.calls.delete(func);
+      this._debounceContext.calls.delete(func);
       func(...args);
-    }, this._debounce.interval);
+    }, config?.interval ?? this._debounceContext.interval);
   }
 
-  throttle(func: ThrottledFunction, ...args: unknown[]) {
-    if (!this._throttle.calls.has(func)) {
+  private _throttle(
+    config: PerformanceFunctionConfig | null,
+    func: ThrottledFunction,
+    ...args: unknown[]
+  ) {
+    if (!this._throttleContext.calls.has(func)) {
       func(...args);
-      this._throttle.calls.add(func);
+      this._throttleContext.calls.add(func);
 
       setTimeout(() => {
-        this._throttle.calls.delete(func);
-      }, this._throttle.interval);
+        this._throttleContext.calls.delete(func);
+      }, config?.interval ?? this._throttleContext.interval);
     }
   }
 
-  deduplicate(func: DeduplicatedFunction, ...args: unknown[]) {
-    let calls = this._deduplication.calls.get(func);
+  private _deduplicate(
+    config: PerformanceFunctionConfig | null,
+    func: DeduplicatedFunction,
+    ...args: any[]
+  ) {
+    let calls = this._deduplicationContext.calls.get(func);
 
     if (calls === undefined) {
-      calls = this._deduplication.calls.set(func, []).get(func);
+      calls = this._deduplicationContext.calls.set(func, []).get(func);
     }
 
     let call = calls?.find((item) => isDeepEqual(item.args, args));
@@ -114,9 +170,9 @@ export class Performer {
     }
 
     call.timeout = setTimeout(() => {
-      this._deduplication.calls.delete(func);
+      this._deduplicationContext.calls.delete(func);
       func(call.count, ...args);
-    }, this._deduplication.interval);
+    }, config?.interval ?? this._deduplicationContext.interval);
   }
 }
 
