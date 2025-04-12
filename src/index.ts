@@ -7,6 +7,7 @@ type AnyFunction = (...args: any[]) => any;
 type DebouncedFunction = (...args: any[]) => any;
 type ThrottledFunction = (...args: any[]) => any;
 type DeduplicatedFunction = (count: number, ...args: any[]) => any;
+type LimitedFunction = (...args: any[]) => any;
 
 type FunctionCall = {
   args: unknown[];
@@ -31,34 +32,49 @@ type DeduplicationContext = {
   interval: number;
 };
 
+type LimitationContext = {
+  calls: Map<DeduplicatedFunction, number>;
+  max: number;
+};
+
 interface IPerformanceFunction {
   (func: AnyFunction, ...args: unknown[]): void;
 }
 
-interface IPerformanceProperty<
-  TConfig extends PerformanceFunctionConfig = PerformanceFunctionConfig,
-> extends IPerformanceFunction {
+interface IPerformanceProperty<TConfig extends object = object>
+  extends IPerformanceFunction {
   configure: (config: TConfig) => IPerformanceFunction;
 }
 
-type PerformanceFunctionConfig = {
+interface IConfiguredFunction {
+  (config: object, func: AnyFunction, ...args: unknown[]): void;
+}
+
+type TimedFunctionConfig = {
   interval?: number;
 };
 
+type LimitedFunctionConfig = {
+  max?: number;
+};
+
 type PerformerConfig = {
-  debounce?: PerformanceFunctionConfig;
-  throttle?: PerformanceFunctionConfig;
-  deduplication?: PerformanceFunctionConfig;
+  debounce?: TimedFunctionConfig;
+  throttle?: TimedFunctionConfig;
+  deduplication?: TimedFunctionConfig;
+  limitation?: LimitedFunctionConfig;
 };
 
 export class Performer {
   private readonly _debounceContext: DebounceContext;
   private readonly _throttleContext: ThrottleContext;
   private readonly _deduplicationContext: DeduplicationContext;
+  private readonly _limitationContext: LimitationContext;
 
-  readonly debounce: IPerformanceProperty;
-  readonly throttle: IPerformanceProperty;
-  readonly deduplicate: IPerformanceProperty;
+  readonly debounce: IPerformanceProperty<TimedFunctionConfig>;
+  readonly throttle: IPerformanceProperty<TimedFunctionConfig>;
+  readonly deduplicate: IPerformanceProperty<TimedFunctionConfig>;
+  readonly limit: IPerformanceProperty<LimitedFunctionConfig>;
 
   constructor(config?: PerformerConfig) {
     this._debounceContext = {
@@ -76,37 +92,57 @@ export class Performer {
       interval: config?.deduplication?.interval ?? 0,
     };
 
+    this._limitationContext = {
+      calls: new Map<DeduplicatedFunction, number>(),
+      max: config?.limitation?.max ?? Infinity,
+    };
+
     this.debounce = this._deconfigure(
       this._debounce.bind(this),
-    ) as IPerformanceProperty;
-    this.debounce.configure = this._configure(this._debounce.bind(this));
+    ) as IPerformanceProperty<TimedFunctionConfig>;
+    this._defineConfigureProperty(this.debounce, this._debounce);
 
     this.throttle = this._deconfigure(
       this._throttle.bind(this),
-    ) as IPerformanceProperty;
-    this.throttle.configure = this._configure(this._throttle.bind(this));
+    ) as IPerformanceProperty<TimedFunctionConfig>;
+    this._defineConfigureProperty(this.throttle, this._throttle);
 
     this.deduplicate = this._deconfigure(
       this._deduplicate.bind(this),
-    ) as IPerformanceProperty;
-    this.deduplicate.configure = this._configure(this._deduplicate.bind(this));
+    ) as IPerformanceProperty<TimedFunctionConfig>;
+    this._defineConfigureProperty(this.deduplicate, this._deduplicate);
+
+    this.limit = this._deconfigure(
+      this._limit.bind(this),
+    ) as IPerformanceProperty<LimitedFunctionConfig>;
+    this._defineConfigureProperty(this.limit, this._limit);
+  }
+
+  private _defineConfigureProperty(
+    property: IPerformanceProperty,
+    func: IConfiguredFunction,
+  ) {
+    Object.defineProperty(property, 'configure', {
+      value: this._configure(func.bind(this)),
+      writable: false,
+      enumerable: false,
+    });
   }
 
   private _deconfigure<TFunction extends AnyFunction>(func: TFunction) {
     return (...args: unknown[]) => func(null, ...args);
   }
 
-  private _configure<
-    TFunction extends AnyFunction,
-    TConfig extends PerformanceFunctionConfig = PerformanceFunctionConfig,
-  >(func: TFunction) {
+  private _configure<TFunction extends AnyFunction, TConfig extends object>(
+    func: TFunction,
+  ) {
     return (config: TConfig) => {
       return (...args: unknown[]) => func(config, ...args);
     };
   }
 
   private _debounce(
-    config: PerformanceFunctionConfig | null,
+    config: TimedFunctionConfig | null,
     func: DebouncedFunction,
     ...args: unknown[]
   ) {
@@ -129,7 +165,7 @@ export class Performer {
   }
 
   private _throttle(
-    config: PerformanceFunctionConfig | null,
+    config: TimedFunctionConfig | null,
     func: ThrottledFunction,
     ...args: unknown[]
   ) {
@@ -144,7 +180,7 @@ export class Performer {
   }
 
   private _deduplicate(
-    config: PerformanceFunctionConfig | null,
+    config: TimedFunctionConfig | null,
     func: DeduplicatedFunction,
     ...args: any[]
   ) {
@@ -173,6 +209,21 @@ export class Performer {
       this._deduplicationContext.calls.delete(func);
       func(call.count, ...args);
     }, config?.interval ?? this._deduplicationContext.interval);
+  }
+
+  private _limit(
+    config: LimitedFunctionConfig | null,
+    func: LimitedFunction,
+    ...args: unknown[]
+  ) {
+    const numberOfCalls = this._limitationContext.calls.get(func) ?? 0;
+    const maxNumberOfCalls = config?.max ?? this._limitationContext.max;
+
+    this._limitationContext.calls.set(func, numberOfCalls + 1);
+
+    if (numberOfCalls < maxNumberOfCalls) {
+      func(...args);
+    }
   }
 }
 
